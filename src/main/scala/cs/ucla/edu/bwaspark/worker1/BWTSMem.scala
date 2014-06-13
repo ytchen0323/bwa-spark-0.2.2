@@ -52,13 +52,11 @@ class BWTSMem {
       //assert(tmp_idx >= 0) //assertion enabled?
       //mimic memcpy in the orignal program, test needed!!!
       var i = 0
-      //for (i <- 0 to 3) {
       while(i < 4) {
         cnt(i) = mBWT.bwt(tmp_idx) << 32 | mBWT.bwt(tmp_idx + 1)
         tmp_idx += 2
         i += 1
       }
-      //}
       index += 8
       var end_idx = index + ((_k >>> 4) - ((_k & ~OCC_INTV_MASK) >>> 4))
       var x : Long = 0
@@ -66,16 +64,12 @@ class BWTSMem {
       //println("index: " + index + ", end_idx: " + end_idx + ", diff: " + (end_idx - index))
       var indexInt = index.toInt
       var endIdxInt = end_idx.toInt
-      //while (index < end_idx) {
       while (indexInt < endIdxInt) {
-        //b = mBWT.bwt(index.toInt)
         b = mBWT.bwt(indexInt)
         x += mBWT.cntTable(b & 0xff) + mBWT.cntTable((b >>> 8) & 0xff) + mBWT.cntTable((b >>> 16) & 0xff) + mBWT.cntTable(b >>> 24)  // Inline occAux4(mBWT.bwt(index.toInt))
         indexInt += 1
-        //index += 1
       }
 
-      //var tmp : Int = mBWT.bwt(index.toInt) & ~((1 << ((~_k & 15) << 1)) - 1)
       var tmp : Int = mBWT.bwt(indexInt) & ~((1 << ((~_k & 15) << 1)) - 1)
       x += mBWT.cntTable(tmp & 0xff) + mBWT.cntTable((tmp >>> 8) & 0xff) + mBWT.cntTable((tmp >>> 16) & 0xff) + mBWT.cntTable(tmp >>> 24) - (~_k & 15)  // Inline occAux4(tmp)
       cnt(0) += x & 0xff
@@ -103,13 +97,11 @@ class BWTSMem {
       //assert(tmp_idx >= 0) //assertion enabled?
       //mimic memcpy in the orignal program, test needed!!!
       var i = 0
-      //for (i <- 0 to 3) {
       while(i < 4) {
         m_tk(i) = mBWT.bwt(tmp_idx) << 32 | mBWT.bwt(tmp_idx + 1)
 	tmp_idx += 2
         i += 1
       }
-      //}
       index += 8 //sizeof(bwtint_t) in the original algo
       var endk_idx = index + ((_k >>> 4) - ((_k & ~OCC_INTV_MASK) >>> 4))
       var endl_idx = index + ((_l >>> 4) - ((_l & ~OCC_INTV_MASK) >>> 4))
@@ -118,29 +110,21 @@ class BWTSMem {
       var b : Int = 0
       var indexInt = index.toInt
       var endkIdxInt = endk_idx.toInt
-      //while (index < endk_idx) {
       while (indexInt < endkIdxInt) {
-        //b = mBWT.bwt(index.toInt)
         b = mBWT.bwt(indexInt)
 	x += mBWT.cntTable(b & 0xff) + mBWT.cntTable((b >>> 8) & 0xff) + mBWT.cntTable((b >>> 16) & 0xff) + mBWT.cntTable(b >>> 24)  // Inline occAux4(mBWT.bwt(index.toInt))
 	indexInt += 1
-	//index += 1
       }
       y = x
       var tmp : Int = 0
-      //tmp = mBWT.bwt(index.toInt) & ~((1 << ((~_k & 15) << 1)) - 1)
       tmp = mBWT.bwt(indexInt) & ~((1 << ((~_k & 15) << 1)) - 1)
       x += mBWT.cntTable(tmp & 0xff) + mBWT.cntTable((tmp >>> 8) & 0xff) + mBWT.cntTable((tmp >>> 16) & 0xff) + mBWT.cntTable(tmp >>> 24) - (~_k & 15)  // Inline occAux4(tmp)
       var endlIdxInt = endl_idx.toInt
-      //while (index < endl_idx) {
       while (indexInt < endlIdxInt) {
-        //b = mBWT.bwt(index.toInt)
         b = mBWT.bwt(indexInt)
 	y += mBWT.cntTable(b & 0xff) + mBWT.cntTable((b >>> 8) & 0xff) + mBWT.cntTable((b >>> 16) & 0xff) + mBWT.cntTable(b >>> 24)  // Inline occAux4(mBWT.bwt(index.toInt))
 	indexInt += 1
-	//index += 1
       }
-      //tmp = mBWT.bwt(index.toInt) & ~((1 << ((~_l & 15) << 1)) - 1)
       tmp = mBWT.bwt(indexInt) & ~((1 << ((~_l & 15) << 1)) - 1)
       y += mBWT.cntTable(tmp & 0xff) + mBWT.cntTable((tmp >>> 8) & 0xff) + mBWT.cntTable((tmp >>> 16) & 0xff) + mBWT.cntTable(tmp >>> 24) - (~_l & 15)  // Inline occAux4(tmp) 
       m_tk.copyToArray(m_tl)
@@ -169,13 +153,11 @@ class BWTSMem {
     if (DebugFlag.debugBWTSMem == true)
       println("[DEBUG] Back from bwt_2occ4.")
       var i = 0
-      //for (i <- 0 to 3) {
       while(i < 4) {
 	m_ok(i).k = mBWT.L2(i) + 1 + m_tk(i)
 	m_ok(i).s = m_tl(i) - m_tk(i)
         i += 1
       }
-      //}
       cond = ((m_ik.k <= mBWT.primary) && (m_ik.k + m_ik.s - 1 >= mBWT.primary))
       m_ok(3).l = m_ik.l
       if (cond) m_ok(3).l += 1
@@ -195,7 +177,6 @@ class BWTSMem {
         println("[DEBUG] m_ik.s = " + m_ik.s)
       }
       var i = 0
-      //for (i <- 0 to 3) {
       while(i < 4) {
 	m_ok(i).l = (mBWT.L2(i) + 1 + m_tk(i))
 	m_ok(i).s = m_tl(i) - m_tk(i)
@@ -203,7 +184,6 @@ class BWTSMem {
         if (DebugFlag.debugBWTSMem == true)
           println("[DEBUG] bp1: m_ok(" + i + ").s = " + m_ok(i).s + ", m_ik.s = " + m_ik.s)
       }
-      //}
       cond = ((m_ik.l <= mBWT.primary) && (m_ik.l + m_ik.s - 1 >= mBWT.primary))
       if (DebugFlag.debugBWTSMem == true)
         println("[DEBUG] bp2: m_ik.s = " + m_ik.s)
@@ -252,7 +232,6 @@ class BWTSMem {
       }
 
       var i: Int = x + 1
-//      breakable { for (i <- x + 1 to len - 1) { //forward search
       while (i < len && breaked == false) { //forward search
         if (DebugFlag.debugBWTSMem == true)
           println("[DEBUG] i = " + i + " ,q[i] = " + q(i))
@@ -270,7 +249,6 @@ class BWTSMem {
               if (DebugFlag.debugBWTSMem == true)
                 println("[DEBUG] breaking!!!")
               breaked = true
-//              break
             }
           }
           if (breaked == false) {
@@ -284,7 +262,6 @@ class BWTSMem {
           var m_ik_copy = new BWTIntvType(m_ik.startPoint, m_ik.endPoint, m_ik.k, m_ik.l, m_ik.s)
           curr.+=:(m_ik_copy) //prepend the item to the list -- no need to reverse later
           breaked = true
-//          break
         }
         i += 1
       }
@@ -315,7 +292,6 @@ class BWTSMem {
 
       i = x - 1
 
-//      breakable { while (i >= -1) { //backward extension
       breaked = false
       while (i >= -1 && breaked == false) { //backward extension
         if (i < 0)
@@ -327,9 +303,7 @@ class BWTSMem {
         curr.clear
         if (DebugFlag.debugBWTSMem == true)
           println("[DEBUG] prev.length = " + prev.length)
-//        breakable { for (j <- 0 to prev.length - 1) {
         var j = 0
-        //for (j <- 0 to prev.length - 1) {
         while(j < prev.length) {
           m_ik = prev(j)
           if (DebugFlag.debugBWTSMem == true)
@@ -364,7 +338,6 @@ class BWTSMem {
           
           j += 1
         }
-        //}
         if (curr.isEmpty) breaked = true
         else {
           swap = curr
