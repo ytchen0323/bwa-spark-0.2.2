@@ -11,6 +11,8 @@ import java.io.{FileReader, BufferedReader}
 
 object MemChainToAlign {
   val MAX_BAND_TRY = 2    
+  val MARKED = -2
+
   /**
     *  Data structure which keep both the length of a seed and its index in the original chain
     */
@@ -67,7 +69,7 @@ object MemChainToAlign {
       i += 1
     }
     
-    srt = srt.sortBy(s => s.len)
+    srt = srt.sortBy(s => (s.len, s.index))
     //srt.map(s => println("(" + s.len + ", " + s.index + ")") )  // debugging message
 
     // The main for loop    
@@ -75,18 +77,22 @@ object MemChainToAlign {
     while(k >= 0) {
       val seed = chain.seedsRefArray( srt(k).index )
       var i = testExtension(opt, seed, regArray)
-     
       var checkoverlappingRet = -1
 
       if(i < regArray.curLength) checkoverlappingRet = checkOverlapping(k + 1, seed, chain, srt)
       
       // no overlapping seeds; then skip extension
       if((i < regArray.curLength) && (checkoverlappingRet == chain.seeds.length)) {
-        //println("[0] " + k)  // testing
-        srt(k).index = 0  // mark that seed extension has not been performed
+        //println("[0] " + k + ", curLength " + regArray.curLength + ", ret " + checkoverlappingRet)  // testing
+        srt(k).index = MARKED  // mark that seed extension has not been performed
       }
       else {
-        //println("[1] " + k) // testing
+        // testing
+        //if(checkoverlappingRet != -1)
+          //println("[1] " + k + ", curLength " + regArray.curLength + ", ret " + checkoverlappingRet)
+        //else
+          //println("[1] " + k + ", curLength " + regArray.curLength + ", ret " + i) 
+
         // push the current align reg into the output list
         // initialize a new alnreg
         var reg = new MemAlnRegType
@@ -101,6 +107,7 @@ object MemChainToAlign {
           val ret = leftExtension(opt, seed, rmax, query, rseq, reg) 
           reg = ret._1
           aw(0) = ret._2
+          //print("L ")   // testing
         }
         else {
           reg.score = seed.len * opt.a
@@ -114,6 +121,7 @@ object MemChainToAlign {
           val ret = rightExtension(opt, seed, rmax, query, queryLen, rseq, reg)
           reg = ret._1
           aw(1) = ret._2
+          //println("R ")   // testing
         }
         else {
           reg.qEnd = queryLen
@@ -124,6 +132,11 @@ object MemChainToAlign {
 
         if(aw(0) > aw(1)) reg.width = aw(0)
         else reg.width = aw(1)
+
+        // testing
+        //print("Seed " + k + "(")
+        //print(reg.rBeg + ", " + reg.rEnd + ", " + reg.qBeg + ", " + reg.qEnd + ", " + reg.score + ", " + reg.trueScore + ", ")
+        //println(reg.sub + ", "  + reg.csub + ", " + reg.subNum + ", " + reg.width + ", " + reg.seedCov + ", " + reg.secondary + ")")
 
         // push the current align reg into the output array
         regArray.regs(regArray.curLength) = reg
@@ -262,7 +275,8 @@ object MemChainToAlign {
       i += 1
     }
 
-    breakIdx
+    if(isBreak) breakIdx
+    else i
   }
     
   /**
@@ -280,9 +294,11 @@ object MemChainToAlign {
     var isBreak = false
 
     while(i < chain.seeds.length && !isBreak) {
-      if(srt(i).index != 0) {
+      //println("srt(" + i + ").index=" + srt(i).index)   // testing
+      if(srt(i).index != MARKED) {
         val targetSeed = chain.seedsRefArray(srt(i).index)
 
+        //println(seed.qBeg + " " + seed.len + " " + seed.rBeg + " " + targetSeed.qBeg + " " + targetSeed.len + " " + targetSeed.rBeg)   // testing
         // only check overlapping if t is long enough; TODO: more efficient by early stopping
         // NOTE: the original implementation may be not correct!!!
         if(targetSeed.len >= seed.len * 0.95) {
@@ -301,7 +317,15 @@ object MemChainToAlign {
       i += 1
     }
 
-    breakIdx
+    
+    if(isBreak) {
+      //println("[B] i' " + breakIdx + ", k " + (startIdx - 1))   // testing
+      breakIdx
+    }
+    else {
+      //println("[NB] i' " + i + ", k " + (startIdx - 1))   // testing
+      i
+    }
   }
 
   /**
@@ -364,14 +388,17 @@ object MemChainToAlign {
       regResult.qBeg = seed.qBeg - qle
       regResult.rBeg = seed.rBeg - tle
       regResult.trueScore = regResult.score
+      //print("LE, qle " + qle + ", tle " + tle)   // testing
     }
     // to-end extension
     else {
       regResult.qBeg = 0
       regResult.rBeg = seed.rBeg - gtle
       regResult.trueScore = gscore
+      //print("TEE, gtle " + gtle)   // testing
     }
 
+    //println(", qb " + regResult.qBeg + ", rb " + regResult.rBeg + ", truesc " + regResult.trueScore)   // testing
     (regResult, aw)
   }
 
@@ -410,10 +437,11 @@ object MemChainToAlign {
     }
 
     var reArray = new Array[Byte]((rmax(1) - rmax(0) - re).toInt)
+    var reInt = re.toInt
     // fill reArray
     i = 0
     while(i < (rmax(1) - rmax(0) - re).toInt) {
-      reArray(i) = rseq(re.toInt + i)
+      reArray(i) = rseq(reInt + i)
       i += 1
     }
 

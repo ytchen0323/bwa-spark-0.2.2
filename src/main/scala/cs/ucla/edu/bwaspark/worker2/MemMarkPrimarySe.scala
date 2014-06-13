@@ -1,9 +1,7 @@
 package cs.ucla.edu.bwaspark.worker2
 
-import scala.util.control.Breaks._
 import scala.List
 import scala.math.abs
-import scala.collection.mutable.MutableList
 
 import cs.ucla.edu.bwaspark.datatype._
 
@@ -25,17 +23,19 @@ object MemMarkPrimarySe {
     var j: Int = 0
     var tmp: Int = 0
     var k: Int = 0
-    var z: MutableList[Int] = new MutableList
+    var z: Array[Int] = new Array[Int](n)
+    var zIdx = 0
     //aVar, the returned value
     var aVar: Array[MemAlnRegType] = null
-    if( n != 0) {
-      for( i <- 0 until n ) {
+    if(n != 0) {
+      i = 0
+      while(i < n) {
 	a(i).sub = 0
 	a(i).secondary = -1
 	a(i).hash = hash64((id + i.toLong))
 	//println("i and hash value is "+ i + " "+ a(i).hash)
+        i += 1
       }
-
       //ks_introsort(mem_ars_hash, n, a)
       //#define alnreg_hlt(a, b) ((a).score > (b).score || ((a).score == (b).score && (a).hash < (b).hash))
       //aVar = a.sortWith( (x, y) => ((x.score > y.score) || ( x.score == y.score && (x.hash >>> 1) < (y.hash >>> 1) )  ) )
@@ -48,35 +48,44 @@ object MemMarkPrimarySe {
 	tmp = opt.oIns + opt.eIns
       }
       //kv_push()
-      z += 0
-      for(i <- 1 until n) {
-        var breakIdx: Int = z.size
-	breakable {
-	  for(k <- 0 until z.size) {
-	    j = z(k)
-	    var bMax: Int = if(aVar(j).qBeg > aVar(i).qBeg) aVar(j).qBeg else aVar(i).qBeg
-	    var eMin: Int = if(aVar(j).qEnd < aVar(i).qEnd) aVar(j).qEnd else aVar(i).qEnd
-	    // have overlap
-	    if( eMin > bMax ) {
-	      var minL: Int = if ((aVar(i).qEnd - aVar(i).qBeg)<(aVar(j).qEnd - aVar(j).qBeg)) (aVar(i).qEnd - aVar(i).qBeg) else (aVar(j).qEnd - aVar(j).qBeg)
-	      //have significant overlap
-	      if((eMin - bMax)>= minL * opt.maskLevel) {
-		if(aVar(j).sub == 0) {
-		  aVar(j).sub = aVar(i).score
-		  //println("#######should come here")
-		}
-		if((aVar(j).score - aVar(i).score) <= tmp) aVar(j).subNum = aVar(j).subNum + 1
-		breakIdx = k
-		break
+      z(0) = 0
+      zIdx += 1
+      i = 1
+      while(i < n) {
+        var breakIdx: Int = zIdx
+        var isBreak = false
+        k = 0
+        
+        while(k < zIdx && !isBreak) {
+          j = z(k)
+          var bMax: Int = if(aVar(j).qBeg > aVar(i).qBeg) aVar(j).qBeg else aVar(i).qBeg
+          var eMin: Int = if(aVar(j).qEnd < aVar(i).qEnd) aVar(j).qEnd else aVar(i).qEnd
+          // have overlap
+          if( eMin > bMax ) {
+            var minL: Int = if ((aVar(i).qEnd - aVar(i).qBeg)<(aVar(j).qEnd - aVar(j).qBeg)) (aVar(i).qEnd - aVar(i).qBeg) else (aVar(j).qEnd - aVar(j).qBeg)
+            //have significant overlap
+            if((eMin - bMax)>= minL * opt.maskLevel) {
+              if(aVar(j).sub == 0) {
+                aVar(j).sub = aVar(i).score
+                //println("#######should come here")
+              }
+              if((aVar(j).score - aVar(i).score) <= tmp) aVar(j).subNum = aVar(j).subNum + 1
+              breakIdx = k
+              isBreak = true
+            }
+          }
 
-	      }
-	    }
-	  }
-	}
-	if(breakIdx == z.size ) z += i
+          k += 1
+        }
+	if(breakIdx == zIdx) {
+          z(zIdx) = i
+          zIdx += 1
+        }
 	else {
 	  aVar(i).secondary = z(k)
 	}
+
+        i += 1
       }
     }
     aVar
