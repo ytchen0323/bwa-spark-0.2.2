@@ -74,7 +74,57 @@ object BWAMEMSpark {
     var regs: Array[MemAlnRegType] = _
   }
 
+  class testSWAlnInput {
+    var qLen: Int = _
+    var tLen: Int = _
+    var oDel: Int = _
+    var eDel: Int = _
+    var oIns: Int = _
+    var eIns: Int = _
+    var xtra: Int = _
+    var query: Array[Byte] = _
+    var target: Array[Byte] = _
+  }
+
+  private def loadSWAlnInput(reader: BufferedReader, inputNum: Int): Array[testSWAlnInput] = {
+    var line = reader.readLine    
+    var i = 0
+    var swInputArray = new Array[testSWAlnInput](inputNum)
+ 
+    while(line != null) {
+      val lineFields = line.split(" ")
+      swInputArray(i) = new testSWAlnInput
+      swInputArray(i).qLen = lineFields(0).toInt
+      swInputArray(i).tLen = lineFields(1).toInt
+      swInputArray(i).oDel = lineFields(2).toInt
+      swInputArray(i).eDel = lineFields(3).toInt
+      swInputArray(i).oIns = lineFields(4).toInt
+      swInputArray(i).eIns = lineFields(5).toInt
+      swInputArray(i).xtra = lineFields(6).toInt
+      swInputArray(i).query = new Array[Byte](swInputArray(i).qLen)
+      swInputArray(i).target = new Array[Byte](swInputArray(i).tLen)
+
+      var j = 0
+      while(j < swInputArray(i).qLen) {
+        swInputArray(i).query(j) = (lineFields(7).charAt(j).toInt - 48).toByte
+        j += 1
+      }
+
+      j = 0
+      while(j < swInputArray(i).tLen) {
+        swInputArray(i).target(j) = (lineFields(8).charAt(j).toInt - 48).toByte
+        j += 1
+      }
+
+      line = reader.readLine
+      i += 1
+    }
+
+    swInputArray
+  }
+
   def main(args: Array[String]) {
+/*
     //val sc = new SparkContext("local[12]", "BWA-mem Spark",
        //"/home/hadoopmaster/spark/spark-0.9.0-incubating-bin-hadoop2-prebuilt/", List("/home/ytchen/incubator/bwa-spark-0.2.0/target/bwa-spark-0.2.0.jar"))
     //val sc = new SparkContext("spark://Jc11:7077", "BWA-mem Spark",
@@ -163,7 +213,17 @@ object BWAMEMSpark {
     samWriter.writeString(bwaGenSAMHeader(bwaIdx.bns))
     testReads.foreach(r => samWriter.writeString((r.seq.sam)))
     samWriter.close
+*/
 
+// Testing: Pair-End SW
+    val reader = new BufferedReader(new FileReader("/home/ytchen/bwa/bwa-0.7.8/sw.input"))
+    val inputSW = loadSWAlnInput(reader,100)
+    inputSW.foreach(sw => {
+      print(sw.qLen + " " + sw.tLen + " " + sw.oDel + " " + sw.eDel + " " + sw.oIns + " " + sw.eIns + " " + sw.xtra + " ")
+      sw.query.foreach(print(_))
+      print(" ")
+      sw.target.foreach(print(_))
+      println } )
 
 // Testing
 /*
