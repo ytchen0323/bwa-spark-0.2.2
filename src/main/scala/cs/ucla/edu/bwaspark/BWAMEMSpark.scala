@@ -14,6 +14,7 @@ import cs.ucla.edu.bwaspark.sam.SAMHeader._
 import cs.ucla.edu.bwaspark.sam.SAMWriter
 import cs.ucla.edu.bwaspark.debug.DebugFlag._
 import cs.ucla.edu.bwaspark.fastq._
+import cs.ucla.edu.bwaspark.util.SWUtil._
 
 import java.io.FileReader
 import java.io.BufferedReader
@@ -217,13 +218,23 @@ object BWAMEMSpark {
 
 // Testing: Pair-End SW
     val reader = new BufferedReader(new FileReader("/home/ytchen/bwa/bwa-0.7.8/sw.input"))
-    val inputSW = loadSWAlnInput(reader,100)
-    inputSW.foreach(sw => {
-      print(sw.qLen + " " + sw.tLen + " " + sw.oDel + " " + sw.eDel + " " + sw.oIns + " " + sw.eIns + " " + sw.xtra + " ")
-      sw.query.foreach(print(_))
-      print(" ")
-      sw.target.foreach(print(_))
-      println } )
+    val inputSW = loadSWAlnInput(reader, 100)
+    val mat: Array[Byte] = Array(1, -4, -4, -4, -1, -4, 1, -4, -4, -1, -4, -4, 1, -4, -1, -4, -4, -4, 1, -1, -1, -1, -1, -1, -1)
+    //inputSW.foreach(sw => {
+      //print(sw.qLen + " " + sw.tLen + " " + sw.oDel + " " + sw.eDel + " " + sw.oIns + " " + sw.eIns + " " + sw.xtra + " ")
+      //sw.query.foreach(print(_))
+      //print(" ")
+      //sw.target.foreach(print(_))
+      //println } )
+    
+    var i = 0
+    while(i < 100) {
+      val a = SWAlign(inputSW(i).qLen, inputSW(i).query, inputSW(i).tLen, inputSW(i).target, 5, mat, inputSW(i).oDel, inputSW(i).eDel, inputSW(i).oIns, inputSW(i).eIns, inputSW(i).xtra, 251, 1)
+      println(a.score + " " + a.tEnd + " " + a.qEnd + " " + a.scoreSecond + " " + a.tEndSecond + " " + a.tBeg + " " + a.qBeg) 
+      i += 1
+    }
+
+    
 
 // Testing
 /*
