@@ -400,7 +400,7 @@ object SWUtil {
     val oeDel = oDel + eDel
     val oeIns = oIns + eIns
 
-    var eh: Array[EHType] = new Array[EHType](qLen + 1) // score array
+    var eh: Array[EHType] = new Array[EHType](qLen) // score array
     var qp: Array[Byte] = new Array[Byte](qLen * m) // query profile
     var bestScoreArray: Array[Int] = new Array[Int](tLen) // record scores larger than minScore
     var tEndArray: Array[Int] = new Array[Int](tLen) // record the corresponding target end location
@@ -413,7 +413,7 @@ object SWUtil {
 
     // initialize the score array
     var i = 0
-    while(i < (qLen + 1)) {
+    while(i < qLen) {
       eh(i) = new EHType(0, 0)
       i += 1
     }
@@ -459,6 +459,7 @@ object SWUtil {
         var h = eh(j).h
         var e = eh(j).e   // get H(i-1,j-1) and E(i-1,j)
         eh(j).h = h1      // set H(i,j-1) for the next row
+        if(i == 232) println("j=" + j + ": h " + h + ", e " + e + ", f " + f + ", qp " + qp(qPtr + j))
         h += qp(qPtr + j)
         if(h < e) h = e
         if(h < f) h = f
@@ -477,18 +478,29 @@ object SWUtil {
         if(t < 0) t = 0
         f -= eIns
         if(f < t) f = t   // computed F(i,j+1)
+
+        //if(i == 232) println("j=" + j + ": h " + h + ", e " + e + ", f " + f)
+        //if(i == 231 || i == 232 || i == 233) println(h)
         
         j += 1
       }
 
-      eh(qLen).h = h1
-      eh(qLen).e = 0
+      //eh(qLen).h = h1
+      //eh(qLen).e = 0
 
       // fill bestScoreArray
-      if(m > minScore) {
-        bestScoreArray(bScoreIdx) = m
-        tEndArray(bScoreIdx) = i
-        bScoreIdx += 1
+      if(m >= minScore) {
+        if(bScoreIdx == 0 || tEndArray(bScoreIdx - 1) + 1 != i) { // then append
+          //println("[0] " + i + " " + m + " " + minScore + " " + target(i))
+          bestScoreArray(bScoreIdx) = m
+          tEndArray(bScoreIdx) = i
+          bScoreIdx += 1
+        }
+        else if(bestScoreArray(bScoreIdx - 1) < m) { // modify the last
+          //println("[1] " + i + " " + m + " " + minScore + " " + target(i))
+          bestScoreArray(bScoreIdx - 1) = m
+          tEndArray(bScoreIdx - 1) = i
+        }
       }
 
       // record the max score and the corresponding (i, j)
@@ -500,6 +512,7 @@ object SWUtil {
         if(max >= endScore || max >= maxScore) isBreak = true
       }
 
+      println("i " + i + ", m " + m)
       i += 1
     }
 
@@ -515,6 +528,7 @@ object SWUtil {
         var tmp = (aln.score + qMax - 1) / qMax
         val low = aln.tEnd - tmp
         val high = aln.tEnd + tmp
+        //println(tmp + " " + low + " " + high + " " + bScoreIdx)
 
         var i = 0
         while(i < bScoreIdx) {
@@ -530,5 +544,35 @@ object SWUtil {
     aln
   }
 
-  
+  private def revSeq(len: Int, seq: Array[Byte]) {
+    var i = 0
+    var tmp = -1
+    while(i < (l>>1)) {
+      tmp = seq(i)
+      seq(i) = seq(l - 1 - i)
+      seq(l - 1 - i) = tmp
+      i += 1
+    }
+  }
+
+  def SWAlign2(qLen: Int, query: Array[Byte], tLen: Int, target: Array[Byte], m: Int, mat: Array[Byte], 
+               oDel: Int, eDel: Int, oIns: Int, eIns: Int, xtra: Int, maxScore: Int, qMax: Int): SWAlnType = {
+    var aln = SWAlign(qLen, query, tLen, target, oDel, eDel, oIns, eIns, xtra, maxScore, qMax)
+    
+    if((xtra&KSW_XSTART) == 0 || ((xtra&KSW_XSUBO) && r.score < (xtra&0xffff))) aln
+    else {   
+      revSeq(aln.qEnd + 1, query)
+      revSeq(aln.tEnd + 1, target)
+      val revAln = SWAlign(aln.qEnd + 1, query, tLen, target, oDel, eDel, oIns, eIns, KSW_XSTOP | aln.score, maxScore, qMax)
+      revSeq(aln.qEnd + 1, query)
+      revSeq(aln.tEnd + 1, target)    
+
+      if(aln.score == revAln.score) {
+        aln.tBeg = aln.tEnd - revAln.tEnd
+        aln.qBeg = aln.qEnd - revAln.qEnd
+      }
+
+      aln
+    }
+  } 
 }
