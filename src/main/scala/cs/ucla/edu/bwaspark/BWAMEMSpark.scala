@@ -229,7 +229,7 @@ object BWAMEMSpark {
     
     var i = 0
     while(i < 600) {
-      val a = SWAlign2(inputSW(i).qLen, inputSW(i).query, inputSW(i).tLen, inputSW(i).target, 5, mat, inputSW(i).oDel, inputSW(i).eDel, inputSW(i).oIns, inputSW(i).eIns, inputSW(i).xtra, 251, 1)
+      val a = SWAlign2Test(inputSW(i).qLen, inputSW(i).query, inputSW(i).tLen, inputSW(i).target, 5, mat, inputSW(i).oDel, inputSW(i).eDel, inputSW(i).oIns, inputSW(i).eIns, inputSW(i).xtra, 251, 1)
       println(a.score + " " + a.tEnd + " " + a.qEnd + " " + a.scoreSecond + " " + a.tEndSecond + " " + a.tBeg + " " + a.qBeg) 
       i += 1
     }

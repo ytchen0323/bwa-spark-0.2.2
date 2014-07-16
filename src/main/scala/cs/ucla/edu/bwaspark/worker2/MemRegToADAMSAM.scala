@@ -18,40 +18,6 @@ object MemRegToADAMSAM {
   val int2reverse = Array('T', 'G', 'C', 'A', 'N')
  
 
-  class SAMString {
-    var str: Array[Char] = new Array[Char](8192)
-    var idx: Int = 0
-    var size: Int = 8192
-
-    def addCharArray(in: Array[Char]) {
-      if((idx + in.size + 1) >= size) {
-        size = size << 2
-        val old = str
-        str = new Array[Char](size)
-        old.copyToArray(str, 0, idx + 1)
-      }
- 
-      var i = 0
-      while(i < in.size) {
-        str(idx) = in(i)
-        i += 1
-        idx += 1
-      }
-    }
- 
-    def addChar(c: Char) {
-      if((idx + 1) >= size) {
-        size = size << 2
-        val old = str
-        str = new Array[Char](size)
-        old.copyToArray(str, 0, idx + 1)
-      }
-
-      str(idx) = c
-      idx += 1
-    }
-  }
-
   /**
     *  Transform the alignment registers to SAM format
     *  
@@ -214,7 +180,7 @@ object MemRegToADAMSAM {
     *  @param seq the input sequence (NOTE: currently we use Array[Byte] first. may need to be changed back to Array[Char]!!!)
     *  @param reg the input alignment register
     */
-  private def memRegToAln(opt: MemOptType, bns: BNTSeqType, pac: Array[Byte], seqLen: Int, seq: Array[Byte], reg: MemAlnRegType): MemAlnType = {
+  def memRegToAln(opt: MemOptType, bns: BNTSeqType, pac: Array[Byte], seqLen: Int, seq: Array[Byte], reg: MemAlnRegType): MemAlnType = {
     val aln = new MemAlnType
 
     if(reg == null || reg.rBeg < 0 || reg.rEnd < 0) {
@@ -356,7 +322,7 @@ object MemRegToADAMSAM {
 
 
   //private def memAlnToSAM(bns: BNTSeqType, seq: FASTQSingleNode, seqTrans: Array[Byte], alnList: Array[MemAlnType], which: Int, alnMate: MemAlnType): String = {
-  private def memAlnToSAM(bns: BNTSeqType, seq: FASTQSingleNode, seqTrans: Array[Byte], alnList: Array[MemAlnType], which: Int, alnMate: MemAlnType, samStr: SAMString) {
+  def memAlnToSAM(bns: BNTSeqType, seq: FASTQSingleNode, seqTrans: Array[Byte], alnList: Array[MemAlnType], which: Int, alnMate: MemAlnType, samStr: SAMString) {
     var aln = alnList(which)
     var alnTmp = aln.copy
     var alnMateTmp: MemAlnType = null
@@ -577,7 +543,7 @@ object MemRegToADAMSAM {
     *  @param opt the input MemOptType object
     *  @param reg the input alignment register
     */
-  private def memApproxMapqSe(opt: MemOptType, reg: MemAlnRegType): Int = {
+  def memApproxMapqSe(opt: MemOptType, reg: MemAlnRegType): Int = {
     var sub = 0
     
     if(reg.sub > 0) sub = reg.sub

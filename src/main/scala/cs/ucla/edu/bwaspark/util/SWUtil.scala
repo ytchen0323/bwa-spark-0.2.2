@@ -4,7 +4,7 @@ import scala.util.control.Breaks._
 import scala.math.abs
 import scala.collection.immutable.Vector
 
-import cs.ucla.edu.bwaspark.datatype.{CigarType, CigarSegType, SWAlnType}
+import cs.ucla.edu.bwaspark.datatype.{CigarType, CigarSegType, SWAlnType, MemOptType}
 
 object SWUtil {
   private val MINUS_INF = -0x40000000
@@ -395,8 +395,14 @@ object SWUtil {
   }
 
   // NOTE: maxScore = 255 - abs(opt.b), qMax = abs(opt.a)
-  def SWAlign(qLen: Int, query: Array[Byte], tLen: Int, target: Array[Byte], m: Int, mat: Array[Byte], 
-              oDel: Int, eDel: Int, oIns: Int, eIns: Int, xtra: Int, maxScore: Int, qMax: Int): SWAlnType = {
+  def SWAlign(qLen: Int, query: Array[Byte], tLen: Int, target: Array[Byte], m: Int, opt: MemOptType, xtra: Int): SWAlnType = {
+    val oDel = opt.oDel
+    val eDel = opt.eDel
+    val oIns = opt.oIns
+    val eIns = opt.eIns
+    val mat = opt.mat
+    val maxScore = 255 - abs(opt.b)
+    val qMax = opt.a
     val oeDel = oDel + eDel
     val oeIns = oIns + eIns
 
@@ -459,7 +465,7 @@ object SWUtil {
         var h = eh(j).h
         var e = eh(j).e   // get H(i-1,j-1) and E(i-1,j)
         eh(j).h = h1      // set H(i,j-1) for the next row
-        if(i == 232) println("j=" + j + ": h " + h + ", e " + e + ", f " + f + ", qp " + qp(qPtr + j))
+        //if(i == 232) println("j=" + j + ": h " + h + ", e " + e + ", f " + f + ", qp " + qp(qPtr + j))
         h += qp(qPtr + j)
         if(h < e) h = e
         if(h < f) h = f
@@ -512,7 +518,7 @@ object SWUtil {
         if(max >= endScore || max >= maxScore) isBreak = true
       }
 
-      println("i " + i + ", m " + m)
+      //println("i " + i + ", m " + m)
       i += 1
     }
 
@@ -546,24 +552,193 @@ object SWUtil {
 
   private def revSeq(len: Int, seq: Array[Byte]) {
     var i = 0
-    var tmp = -1
-    while(i < (l>>1)) {
+    var tmp: Byte = -1
+    while(i < (len >> 1)) {
       tmp = seq(i)
-      seq(i) = seq(l - 1 - i)
-      seq(l - 1 - i) = tmp
+      seq(i) = seq(len - 1 - i)
+      seq(len - 1 - i) = tmp
       i += 1
     }
   }
 
-  def SWAlign2(qLen: Int, query: Array[Byte], tLen: Int, target: Array[Byte], m: Int, mat: Array[Byte], 
-               oDel: Int, eDel: Int, oIns: Int, eIns: Int, xtra: Int, maxScore: Int, qMax: Int): SWAlnType = {
-    var aln = SWAlign(qLen, query, tLen, target, oDel, eDel, oIns, eIns, xtra, maxScore, qMax)
+  def SWAlign2(qLen: Int, query: Array[Byte], tLen: Int, target: Array[Byte], m: Int, opt: MemOptType, xtra: Int): SWAlnType = {
+    var aln = SWAlign(qLen, query, tLen, target, m, opt, xtra)
     
-    if((xtra&KSW_XSTART) == 0 || ((xtra&KSW_XSUBO) && r.score < (xtra&0xffff))) aln
+    if((xtra&KSW_XSTART) == 0 || ((xtra&KSW_XSUBO) > 0 && aln.score < (xtra&0xffff))) aln
     else {   
       revSeq(aln.qEnd + 1, query)
       revSeq(aln.tEnd + 1, target)
-      val revAln = SWAlign(aln.qEnd + 1, query, tLen, target, oDel, eDel, oIns, eIns, KSW_XSTOP | aln.score, maxScore, qMax)
+      val revAln = SWAlign(aln.qEnd + 1, query, tLen, target, m, opt, KSW_XSTOP | aln.score)
+      revSeq(aln.qEnd + 1, query)
+      revSeq(aln.tEnd + 1, target)    
+
+      if(aln.score == revAln.score) {
+        aln.tBeg = aln.tEnd - revAln.tEnd
+        aln.qBeg = aln.qEnd - revAln.qEnd
+      }
+
+      aln
+    }
+  } 
+  // NOTE: maxScore = 255 - abs(opt.b), qMax = abs(opt.a)
+  def SWAlignTest(qLen: Int, query: Array[Byte], tLen: Int, target: Array[Byte], m: Int, mat: Array[Byte], 
+                  oDel: Int, eDel: Int, oIns: Int, eIns: Int, xtra: Int, maxScore: Int, qMax: Int): SWAlnType = {
+    val oeDel = oDel + eDel
+    val oeIns = oIns + eIns
+
+    var eh: Array[EHType] = new Array[EHType](qLen) // score array
+    var qp: Array[Byte] = new Array[Byte](qLen * m) // query profile
+    var bestScoreArray: Array[Int] = new Array[Int](tLen) // record scores larger than minScore
+    var tEndArray: Array[Int] = new Array[Int](tLen) // record the corresponding target end location
+    var bScoreIdx: Int = 0 // the pointer of the bestScoreArray
+    var aln = new SWAlnType    
+    var minScore = 0x10000
+    if((xtra & KSW_XSUBO) > 0) minScore = xtra & 0xffff
+    var endScore = 0x10000
+    if((xtra & KSW_XSTOP) > 0) endScore = xtra & 0xffff
+
+    // initialize the score array
+    var i = 0
+    while(i < qLen) {
+      eh(i) = new EHType(0, 0)
+      i += 1
+    }
+
+    // generate the query profile
+    i = 0
+    var j = 0
+    var k = 0
+    while(k < m) {
+      val p = k * m
+
+      j = 0
+      while(j < qLen) {
+        qp(i) = mat(p + query(j))
+        i += 1
+        j += 1
+      }
+
+      k += 1
+    }
+
+    var max: Int = MINUS_INF
+    var max_i: Int = -1
+    var max_j: Int = -1
+
+    i = 0
+    var isBreak = false
+    while(i < tLen && !isBreak) {
+      var j = 0 
+      var t = 0
+      var f = 0
+      var h1 = 0
+      var m = 0
+      var mj = -1
+      var qPtr = target(i) * qLen
+
+      while(j < qLen) {
+        // At the beginning of the loop: eh[j] = { H(i-1,j-1), E(i,j) }, f = F(i,j) and h1 = H(i,j-1)
+        // Similar to SSE2-SW, cells are computed in the following order:
+        //   H(i,j)   = max{H(i-1,j-1)+S(i,j), E(i,j), F(i,j)}
+        //   E(i+1,j) = max{H(i,j)-gapo, E(i,j) - gape}
+        //   F(i,j+1) = max{H(i,j)-gapo, F(i,j) - gape}
+        var h = eh(j).h
+        var e = eh(j).e   // get H(i-1,j-1) and E(i-1,j)
+        eh(j).h = h1      // set H(i,j-1) for the next row
+        //if(i == 232) println("j=" + j + ": h " + h + ", e " + e + ", f " + f + ", qp " + qp(qPtr + j))
+        h += qp(qPtr + j)
+        if(h < e) h = e
+        if(h < f) h = f
+        h1 = h            // save H(i,j) to h1 for the next column
+        //if(m <= h) {
+        if(m < h) {
+          mj = j          // record the position where max score is achieved
+          m = h           // m is stored at eh[mj+1]
+        }
+        t = h - oeDel
+        if(t < 0) t = 0
+        e -= eDel
+        if(e < t) e = t   // computed E(i+1,j)
+        eh(j).e = e       // save E(i+1,j) for the next row
+        t = h - oeIns
+        if(t < 0) t = 0
+        f -= eIns
+        if(f < t) f = t   // computed F(i,j+1)
+
+        //if(i == 232) println("j=" + j + ": h " + h + ", e " + e + ", f " + f)
+        //if(i == 231 || i == 232 || i == 233) println(h)
+        
+        j += 1
+      }
+
+      //eh(qLen).h = h1
+      //eh(qLen).e = 0
+
+      // fill bestScoreArray
+      if(m >= minScore) {
+        if(bScoreIdx == 0 || tEndArray(bScoreIdx - 1) + 1 != i) { // then append
+          //println("[0] " + i + " " + m + " " + minScore + " " + target(i))
+          bestScoreArray(bScoreIdx) = m
+          tEndArray(bScoreIdx) = i
+          bScoreIdx += 1
+        }
+        else if(bestScoreArray(bScoreIdx - 1) < m) { // modify the last
+          //println("[1] " + i + " " + m + " " + minScore + " " + target(i))
+          bestScoreArray(bScoreIdx - 1) = m
+          tEndArray(bScoreIdx - 1) = i
+        }
+      }
+
+      // record the max score and the corresponding (i, j)
+      if(m > max) {
+        max = m
+        max_i = i
+        max_j = mj
+
+        if(max >= endScore || max >= maxScore) isBreak = true
+      }
+
+      //println("i " + i + ", m " + m)
+      i += 1
+    }
+
+    if(max >= maxScore) max = 255
+    aln.score = max
+    aln.tEnd = max_i
+
+    // get a->qe, the end of query match; find the 2nd best score
+    if(aln.score != 255) {
+      aln.qEnd = max_j
+      
+      if(bScoreIdx > 0) {
+        var tmp = (aln.score + qMax - 1) / qMax
+        val low = aln.tEnd - tmp
+        val high = aln.tEnd + tmp
+        //println(tmp + " " + low + " " + high + " " + bScoreIdx)
+
+        var i = 0
+        while(i < bScoreIdx) {
+          if((tEndArray(i) < low || tEndArray(i) > high) && bestScoreArray(i) > aln.scoreSecond) {
+            aln.scoreSecond = bestScoreArray(i) 
+            aln.tEndSecond = tEndArray(i)
+          }
+          i += 1
+        }
+      }
+    }
+
+    aln
+  }
+
+  def SWAlign2Test(qLen: Int, query: Array[Byte], tLen: Int, target: Array[Byte], m: Int, mat: Array[Byte], 
+                   oDel: Int, eDel: Int, oIns: Int, eIns: Int, xtra: Int, maxScore: Int, qMax: Int): SWAlnType = {
+    var aln = SWAlignTest(qLen, query, tLen, target, m, mat, oDel, eDel, oIns, eIns, xtra, maxScore, qMax)
+    
+    if((xtra&KSW_XSTART) == 0 || ((xtra&KSW_XSUBO) > 0 && aln.score < (xtra&0xffff))) aln
+    else {   
+      revSeq(aln.qEnd + 1, query)
+      revSeq(aln.tEnd + 1, target)
+      val revAln = SWAlignTest(aln.qEnd + 1, query, tLen, target, m, mat, oDel, eDel, oIns, eIns, KSW_XSTOP | aln.score, maxScore, qMax)
       revSeq(aln.qEnd + 1, query)
       revSeq(aln.tEnd + 1, target)    
 

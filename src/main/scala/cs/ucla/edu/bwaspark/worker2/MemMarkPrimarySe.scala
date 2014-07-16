@@ -91,7 +91,7 @@ object MemMarkPrimarySe {
     aVar
   }
 
-  private def hash64( key: Long ) : Long = {
+  def hash64( key: Long ) : Long = {
     var keyVar: Long = key
     keyVar += ~(keyVar << 32)
     keyVar ^= (keyVar >>> 22)
