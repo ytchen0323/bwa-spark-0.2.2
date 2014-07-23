@@ -3,7 +3,6 @@ package cs.ucla.edu.bwaspark
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
-//import org.apache.spark.storage.StorageLevel
 
 import scala.collection.mutable.MutableList
 
@@ -15,6 +14,7 @@ import cs.ucla.edu.bwaspark.sam.SAMWriter
 import cs.ucla.edu.bwaspark.debug.DebugFlag._
 import cs.ucla.edu.bwaspark.fastq._
 import cs.ucla.edu.bwaspark.util.SWUtil._
+import cs.ucla.edu.bwaspark.FastMap.memMain
 
 import java.io.FileReader
 import java.io.BufferedReader
@@ -68,6 +68,82 @@ object BWAMEMSpark {
     
     //seqs.foreach(s => println(s.seq))
     seqs
+  }
+
+  private def loadPairFASTQSeqs(fileName1: String, fileName2: String, readNum: Int): Array[FASTQSingleNode] = {
+
+    val reader1 = new BufferedReader(new FileReader(fileName1))
+    val reader2 = new BufferedReader(new FileReader(fileName2))
+    var line = reader1.readLine
+    var i = 0
+    var readIdx = 0    
+    var seqs = new Array[FASTQSingleNode](readNum / 4 * 2)
+
+    while(line != null) {
+
+      val lineFields = line.split(" ")
+      seqs(i) = new FASTQSingleNode
+  
+      if(lineFields.length == 1) {
+        if(lineFields(0).charAt(0) == '@') seqs(i).name = lineFields(0).substring(1).dropRight(2)
+        else seqs(i).name = lineFields(0).dropRight(2)
+        seqs(i).seq = reader1.readLine
+        seqs(i).seqLen = seqs(i).seq.size
+        reader1.readLine
+        seqs(i).qual = reader1.readLine
+        seqs(i).comment = ""
+        i += 1
+      }
+      else if(lineFields.length == 2) {
+        if(lineFields(0).charAt(0) == '@') seqs(i).name = lineFields(0).substring(1).dropRight(2)
+        else seqs(i).name = lineFields(0).dropRight(2)
+        seqs(i).comment = lineFields(1)
+        seqs(i).seq = reader1.readLine
+        seqs(i).seqLen = seqs(i).seq.size
+        reader1.readLine
+        seqs(i).qual = reader1.readLine
+        i += 1
+      }
+      else 
+        println("Error: Input format not handled")
+
+      line = reader2.readLine
+
+      if(line == null) println("Error: the number of two FASTQ files are different")
+      else {
+        val lineFields = line.split(" ")
+        seqs(i) = new FASTQSingleNode
+
+        if(lineFields.length == 1) {
+          if(lineFields(0).charAt(0) == '@') seqs(i).name = lineFields(0).substring(1).dropRight(2)
+          else seqs(i).name = lineFields(0).dropRight(2)
+          seqs(i).seq = reader2.readLine
+          seqs(i).seqLen = seqs(i).seq.size
+          reader2.readLine
+          seqs(i).qual = reader2.readLine
+          seqs(i).comment = ""
+          i += 1
+        }
+        else if(lineFields.length == 2) {
+          if(lineFields(0).charAt(0) == '@') seqs(i).name = lineFields(0).substring(1).dropRight(2)
+          else seqs(i).name = lineFields(0).dropRight(2)
+          seqs(i).comment = lineFields(1)
+          seqs(i).seq = reader2.readLine
+          seqs(i).seqLen = seqs(i).seq.size
+          reader2.readLine
+          seqs(i).qual = reader2.readLine
+          i += 1
+        }
+        else
+          println("Error: Input format not handled")
+      }
+
+      line = reader1.readLine
+    } 
+    
+    //seqs.foreach(s => println(s.seq))
+    seqs
+
   }
 
   class testRead {
@@ -125,7 +201,7 @@ object BWAMEMSpark {
   }
 
   def main(args: Array[String]) {
-/*
+
     //val sc = new SparkContext("local[12]", "BWA-mem Spark",
        //"/home/hadoopmaster/spark/spark-0.9.0-incubating-bin-hadoop2-prebuilt/", List("/home/ytchen/incubator/bwa-spark-0.2.0/target/bwa-spark-0.2.0.jar"))
     //val sc = new SparkContext("spark://Jc11:7077", "BWA-mem Spark",
@@ -136,7 +212,7 @@ object BWAMEMSpark {
     //val fastqRDDLoader = new FASTQRDDLoader(sc, "hdfs://Jc11:9000/user/ytchen/ERR013140_2.filt.fastq.test4/", 13)
     //val fastqRDD = fastqRDDLoader.RDDLoadAll()
     //val fastqRDD = fastqRDDLoader.RDDLoad("hdfs://Jc11:9000/user/ytchen/ERR013140_2.filt.fastq.test4/2/")
-
+/*
     if(bwaSetReadGroup("@RG\tID:HCC1954\tLB:HCC1954\tSM:HCC1954")) {
       println("Read line: " + readGroupLine)
       println("Read Group ID: " + bwaReadGroupID)
@@ -217,6 +293,12 @@ object BWAMEMSpark {
 */
 
 // Testing: Pair-End SW
+//    var seqs = loadPairFASTQSeqs("/home/ytchen/genomics/data/HCC1954_1_20reads.fq", "/home/ytchen/genomics/data/HCC1954_2_20reads.fq", 80)
+    memMain
+    // Set up the flag to be single-end or pair-end
+    
+
+/*
     val reader = new BufferedReader(new FileReader("/home/ytchen/bwa/bwa-0.7.8/sw600.input"))
     val inputSW = loadSWAlnInput(reader, 600)
     val mat: Array[Byte] = Array(1, -4, -4, -4, -1, -4, 1, -4, -4, -1, -4, -4, 1, -4, -1, -4, -4, -4, 1, -1, -1, -1, -1, -1, -1)
@@ -233,8 +315,7 @@ object BWAMEMSpark {
       println(a.score + " " + a.tEnd + " " + a.qEnd + " " + a.scoreSecond + " " + a.tEndSecond + " " + a.tBeg + " " + a.qBeg) 
       i += 1
     }
-
-    
+*/  
 
 // Testing
 /*

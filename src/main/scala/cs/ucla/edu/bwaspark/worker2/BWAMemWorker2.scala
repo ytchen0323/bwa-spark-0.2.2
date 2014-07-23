@@ -3,8 +3,11 @@ package cs.ucla.edu.bwaspark.worker2
 import cs.ucla.edu.bwaspark.datatype._
 import cs.ucla.edu.bwaspark.worker2.MemMarkPrimarySe._
 import cs.ucla.edu.bwaspark.worker2.MemRegToADAMSAM._
+import cs.ucla.edu.bwaspark.worker2.MemSamPe.memSamPe
 
 object BWAMemWorker2 {
+  private val MEM_F_PE: Int = 0x2
+
   /**
     *  Main function of BWA-mem worker2
     *
@@ -22,5 +25,9 @@ object BWAMemWorker2 {
     memRegToSAMSe(opt, bns, pac, seq, regsOut, 0, null)
   }
 
+
+  def bwaMemWorker2Pair(opt: MemOptType, alnRegVec: Array[Array[MemAlnRegType]], bns: BNTSeqType, pac: Array[Byte], seqs: Array[FASTQSingleNode], numProcessed: Long, pes: Array[MemPeStat]) {
+    memSamPe(opt, bns, pac, pes, numProcessed, seqs, alnRegVec)
+  }
 }
 

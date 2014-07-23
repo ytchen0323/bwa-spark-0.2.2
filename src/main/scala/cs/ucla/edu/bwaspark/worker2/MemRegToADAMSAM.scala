@@ -9,13 +9,17 @@ import cs.ucla.edu.bwaspark.sam.SAMHeader._
 import cs.ucla.edu.bwaspark.util.BNTSeqUtil._
 import cs.ucla.edu.bwaspark.util.SWUtil._
 
+// for test use
+import java.io.FileReader
+import java.io.BufferedReader
+
 object MemRegToADAMSAM {
-  val MEM_F_ALL = 0x8
-  val MEM_F_NO_MULTI = 0x10
-  val MEM_MAPQ_COEF = 30.0
-  val int2op = Array('M', 'I', 'D', 'S', 'H')
-  val int2forward = Array('A', 'C', 'G', 'T', 'N')
-  val int2reverse = Array('T', 'G', 'C', 'A', 'N')
+  private val MEM_F_ALL = 0x8
+  private val MEM_F_NO_MULTI = 0x10
+  private val MEM_MAPQ_COEF = 30.0
+  private val int2op = Array('M', 'I', 'D', 'S', 'H')
+  private val int2forward = Array('A', 'C', 'G', 'T', 'N')
+  private val int2reverse = Array('T', 'G', 'C', 'A', 'N')
  
 
   /**
@@ -31,9 +35,6 @@ object MemRegToADAMSAM {
     */
   def memRegToSAMSe(opt: MemOptType, bns: BNTSeqType, pac: Array[Byte], seq: FASTQSingleNode, regs: Array[MemAlnRegType], extraFlag: Int, alnMate: MemAlnType) {
     var alns: MutableList[MemAlnType] = new MutableList[MemAlnType]
-
-    // NOTE: set opt.flag manually here!!! This should be modified from the logger!!!
-    opt.flag = 24
 
     //pre-process: transform A/C/G/T to 0,1,2,3
     def locusEncode(locus: Char): Byte = {
@@ -156,16 +157,35 @@ object MemRegToADAMSAM {
 
    */
   // this one is not tested because it is never been used in 20 reads dataset
-
+/*
   private def getRlen(cigarSegs: Vector[CigarSegType]) : Int = {
     var l: Int = 0
 
-    var k = 0
-    while(k < cigarSegs.size) {
-      if(cigarSegs(k).op == 0 || cigarSegs(k).op == 2) l += cigarSegs(k).len
+    if(cigarSegs != null) {
+      var k = 0
+      while(k < cigarSegs.size) {
+        if(cigarSegs(k).op == 0 || cigarSegs(k).op == 2) l += cigarSegs(k).len
 
-      k += 1
+        k += 1
+      }
     }
+    
+    l
+  }
+*/	
+
+  private def getRlen(cigar: CigarType) : Int = {
+    var l: Int = 0
+
+    if(cigar != null) {
+      var k = 0
+      while(k < cigar.cigarSegs.size) {
+        if(cigar.cigarSegs(k).op == 0 || cigar.cigarSegs(k).op == 2) l += cigar.cigarSegs(k).len
+
+        k += 1
+      }
+    }
+    
     l
   }
 	
@@ -203,6 +223,7 @@ object MemRegToADAMSAM {
       // secondary alignment
       if(reg.secondary >= 0) aln.flag |= 0x100 
 
+      //println(reg.qBeg + " " + reg.qEnd + " " + reg.rBeg + " " + reg.rEnd)
       val ret = bwaFixXref2(opt.mat, opt.oDel, opt.eDel, opt.oIns, opt.eIns, opt.w, bns, pac, seq, reg.qBeg, reg.qEnd, reg.rBeg, reg.rEnd)
       val iden = ret._5
       if(iden < 0) {
@@ -389,9 +410,13 @@ object MemRegToADAMSAM {
       if(alnTmp.rid == alnMateTmp.rid) {
         var p0: Long = -1
         var p1: Long = -1
-        if(alnTmp.isRev > 0) p0 = alnTmp.pos + getRlen(alnTmp.cigar.cigarSegs) - 1
+        //if(alnTmp.isRev > 0) p0 = alnTmp.pos + getRlen(alnTmp.cigar.cigarSegs) - 1
+        if(alnTmp.isRev > 0) p0 = alnTmp.pos + getRlen(alnTmp.cigar) - 1
         else p0 = alnTmp.pos
-        if(alnMateTmp.isRev > 0) p1 = alnMateTmp.pos + getRlen(alnMateTmp.cigar.cigarSegs) - 1
+        //println(alnMateTmp.isRev + " " + alnMateTmp.pos)
+        //println(getRlen(alnMateTmp.cigar.cigarSegs))
+        //if(alnMateTmp.isRev > 0) p1 = alnMateTmp.pos + getRlen(alnMateTmp.cigar.cigarSegs) - 1
+        if(alnMateTmp.isRev > 0) p1 = alnMateTmp.pos + getRlen(alnMateTmp.cigar) - 1
         else p1 = alnMateTmp.pos
         if(alnMateTmp.nCigar == 0 || alnTmp.nCigar == 0) samStr.addChar('0')
         else {
@@ -659,6 +684,7 @@ object MemRegToADAMSAM {
             if(x < ce && ce <= x + len) {
               qEndRet = y
               rEndRet = x
+              isBreak = true
             }
             else x += len
           }
@@ -674,6 +700,7 @@ object MemRegToADAMSAM {
     
       var iden = 0
       if(qBegRet == qEndRet || rBegRet == rEndRet) iden = -2
+      //println(qBegRet + " " + qEndRet + " " + rBegRet + " " + rEndRet + " " + iden)
       (qBegRet, qEndRet, rBegRet, rEndRet, iden)
     }
 
@@ -839,6 +866,31 @@ object MemRegToADAMSAM {
       }
     }
 
+  }
+
+
+  def testBwaFixXref2(fileName: String, opt: MemOptType, bns: BNTSeqType, pac: Array[Byte]) {
+    
+    val reader = new BufferedReader(new FileReader(fileName))
+    var line = reader.readLine
+    var i = 0
+
+    while(line != null) {
+      val seq = line.toCharArray.map(ele => (ele.toByte - 48).toByte)
+      //seq.foreach(print)
+      //println
+      line = reader.readLine
+      val lineFields = line.split(" ")
+      val qBeg = lineFields(0).toInt
+      val qEnd = lineFields(1).toInt
+      val rBeg = lineFields(2).toLong
+      val rEnd = lineFields(3).toLong
+
+      val ret = bwaFixXref2(opt.mat, opt.oDel, opt.eDel, opt.oIns, opt.eIns, opt.w, bns, pac, seq, qBeg, qEnd, rBeg, rEnd)
+      println(ret._1 + " " + ret._2 + " " + ret._3 + " " + ret._4 + " " + ret._5)
+      line = reader.readLine
+      i += 1
+    }
   }
 }
 

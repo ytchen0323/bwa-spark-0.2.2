@@ -14,6 +14,11 @@ import cs.ucla.edu.bwaspark.util.SWUtil.SWAlign2
 import cs.ucla.edu.bwaspark.worker2.MemMarkPrimarySe.{hash64, memMarkPrimarySe}
 import cs.ucla.edu.bwaspark.worker2.MemRegToADAMSAM.{memApproxMapqSe, memRegToAln, memAlnToSAM, memRegToSAMSe}
 
+import java.io.FileReader
+import java.io.BufferedReader
+
+// testing use
+import java.math.BigInteger
 
 object MemSamPe {
   private val MIN_RATIO = 0.8
@@ -75,6 +80,11 @@ object MemSamPe {
   // Not called in the current setting; Needs to be tested
   def memPeStat(opt: MemOptType, pacLen: Long, n: Int, regArray: Array[MemAlnRegArrayType], pes: Array[MemPeStat]) {
     var iSize: Array[Vector[Int]] = new Array[Vector[Int]](4)
+    var j = 0
+    while(j < 4) {
+      iSize(j) = scala.collection.immutable.Vector.empty
+      j += 1
+    }
 
     var i = 0
     while(i < (n>>>1)) {
@@ -84,7 +94,7 @@ object MemSamPe {
       r(0) = regArray(i<<1|0)
       r(1) = regArray(i<<1|1)
 
-      if(r(0).regs.size != 0 && r(1).regs.size != 0) {
+      if(r(0) != null && r(1) != null) {
         if(calSub(opt, r(0).regs) <= MIN_RATIO * r(0).regs(0).score) {
           if(calSub(opt, r(1).regs) <= MIN_RATIO * r(1).regs(0).score) {
             // Inline mem_infer_dir
@@ -129,7 +139,7 @@ object MemSamPe {
         var p75: Int = q((0.75 * iSize(d).size + 0.499).toInt)
         pes(d).low = (p25 - OUTLIER_BOUND * (p75 - p25) + 0.499).toInt
         if(pes(d).low < 1) pes(d).low = 1
-        pes(d).high = (p75 - OUTLIER_BOUND * (p75 - p25) + 0.499).toInt
+        pes(d).high = (p75 + OUTLIER_BOUND * (p75 - p25) + 0.499).toInt
         println("(25, 50, 75) percentile: (" + p25 + ", " + p50 + ", " + p75 + ")")
         println("low and high boundaries for computing mean and std.dev: (" + pes(d).low + ", " + pes(d).high + ")")
 
@@ -150,6 +160,8 @@ object MemSamPe {
         while(i < q.size) {
           if(q(i) >= pes(d).low && q(i) <= pes(d).high)
             pes(d).std += (q(i) - pes(d).avg) * (q(i) - pes(d).avg)
+
+          i += 1
         }
         pes(d).std = sqrt(pes(d).std / x)
         println("mean and std.dev: (" + pes(d).avg + ", " + pes(d).std + ")")
@@ -178,9 +190,12 @@ object MemSamPe {
         pes(d).failed = 1
         println("skip orientation")
       }     
+
+      d += 1
     }
   }
 
+  // verified
   private def memMateSw(opt: MemOptType, pacLen: Long, pac: Array[Byte], pes: Array[MemPeStat], reg: MemAlnRegType, 
                         mateSeqLen: Int, mateSeq: Array[Byte], mateRegs: Array[MemAlnRegType]): (Int, Array[MemAlnRegType]) = {
     var mateRegsUpdated: Vector[MemAlnRegType] = scala.collection.immutable.Vector.empty
@@ -194,38 +209,44 @@ object MemSamPe {
       else skip(r) = 0
       r += 1     
     }
+    //println("[0] " + skip(0) + " " + skip(1) + " " + skip(2) + " " + skip(3))
 
     var i = 0
-    while(i < mateRegs.size) { // consistent pair exist; no need to perform SW
-      // Inline mem_infer_dir
-      var r1: Boolean = false
-      var r2: Boolean = false
-      if(reg.rBeg >= pacLen) r1 = true
-      if(mateRegs(i).rBeg >= pacLen) r2 = true
+    if(mateRegs != null) {
+      while(i < mateRegs.size) { // consistent pair exist; no need to perform SW
+        // Inline mem_infer_dir
+        var r1: Boolean = false
+        var r2: Boolean = false
+        if(reg.rBeg >= pacLen) r1 = true
+        if(mateRegs(i).rBeg >= pacLen) r2 = true
 
-      var rBegLarger = mateRegs(i).rBeg
-      // rBegLarger is the coordinate of read 2 on the read 1 strand
-      if(r1 != r2) rBegLarger = (pacLen << 1) - 1 - mateRegs(i).rBeg
-      var dist: Int = (reg.rBeg - rBegLarger).toInt
-      if(rBegLarger > reg.rBeg) dist = (rBegLarger - reg.rBeg).toInt
+        var rBegLarger = mateRegs(i).rBeg
+        // rBegLarger is the coordinate of read 2 on the read 1 strand
+        if(r1 != r2) rBegLarger = (pacLen << 1) - 1 - mateRegs(i).rBeg
+        var dist: Int = (reg.rBeg - rBegLarger).toInt
+        if(rBegLarger > reg.rBeg) dist = (rBegLarger - reg.rBeg).toInt
 
-      var cond1 = 1
-      if(r1 == r2) cond1 = 0
-      var cond2 = 3
-      if(rBegLarger > reg.rBeg) cond2 = 0
+        var cond1 = 1
+        if(r1 == r2) cond1 = 0
+        var cond2 = 3
+        if(rBegLarger > reg.rBeg) cond2 = 0
 
-      r = cond1 ^ cond2      
-      if(dist > pes(r).low && pes(r).high > 0) skip(r) = 1     
+        r = cond1 ^ cond2      
+        if(dist >= pes(r).low && dist <= pes(r).high) skip(r) = 1     
 
-      i += 1
+        i += 1
+      }
     }
-    
+ 
+    //println("[1] " + skip(0) + " " + skip(1) + " " + skip(2) + " " + skip(3))
     if(skip(0) + skip(1) + skip(2) + skip(3) == 4) (0, mateRegs)   // consistent pair exist; no need to perform SW
 
-    i = 0
-    while(i < mateRegs.size) {
-      mateRegsUpdated = mateRegsUpdated :+ mateRegs(i)
-      i += 1
+    if(mateRegs != null) {
+      i = 0
+      while(i < mateRegs.size) {
+        mateRegsUpdated = mateRegsUpdated :+ mateRegs(i)
+        i += 1
+      }
     }
 
     r = 0
@@ -278,6 +299,7 @@ object MemSamPe {
           val xtra = KSW_XSUBO | KSW_XSTART | xtraTmp | (opt.minSeedLen * opt.a)
           val aln = SWAlign2(mateSeqLen, seq, ref._2.toInt, ref._1, 5, opt, xtra) // ref._1 -> ref
           
+          //println("aln score: " + aln.score + ", xtra: " + xtra)  
           var alnTmp = new MemAlnRegType
           if(aln.score >= opt.minSeedLen && aln.qBeg >= 0) { // something goes wrong if aln.qBeg < 0
             if(isRev > 0) {
@@ -327,10 +349,12 @@ object MemSamPe {
 
         if(n > 0) {
           // Sort here!
+          //println("size: " + mateRegsUpdated.size)
+          //mateRegsUpdated.foreach(ele => println(ele.rBeg + " " + ele.rEnd + " " + ele.qBeg + " " + ele.qEnd + " " + ele.score + " " + ele.trueScore + " " + ele.sub + " " + ele.csub + " " + ele.subNum + " " + ele.width + " " + ele.seedCov + " " + ele.secondary + " " + ele.hash))
           mateRegsUpdated = mateRegsUpdated.sortBy(seq => (seq.score))
           regArray.regs = mateRegsUpdated.toArray
-          regArray.curLength = mateRegs.size
-          regArray.maxLength = mateRegs.size
+          regArray.curLength = mateRegsUpdated.size
+          regArray.maxLength = mateRegsUpdated.size
           regArray = memSortAndDedup(regArray, opt.maskLevelRedun)
           
         }
@@ -351,22 +375,41 @@ object MemSamPe {
     var y: Long = 0
   } 
 
+  /**
+    *  Data structure which keeps a pair of Long integer
+    */
+  class QuadLong {
+    var xMSB: Long = 0
+    var xRest: Long = 0
+    var x: Long = 0
+    var y: Long = 0
+  } 
+
+
+  // Verification done with the c version!!!
   private def memPair(opt: MemOptType, pacLen: Long, pac: Array[Byte], pes: Array[MemPeStat], alnRegVec: Array[Array[MemAlnRegType]], id: Long): (Int, Int, Int, Array[Int]) = {
     var keyVec: Vector[PairLong] = scala.collection.immutable.Vector.empty
+    //var keyUVec: Vector[QuadLong] = scala.collection.immutable.Vector.empty
     var keyUVec: Vector[PairLong] = scala.collection.immutable.Vector.empty
     var y: Array[Int] = new Array[Int](4)
     var r = 0
     var i = 0
     var z: Array[Int] = new Array[Int](2)
 
+    z(0) = -1
+    z(1) = -1
+
     while(r < 2) {
+      i = 0
       while(i < alnRegVec(r).size) {
         var key: PairLong = new PairLong
 
         key.x = alnRegVec(r)(i).rBeg
         if(alnRegVec(r)(i).rBeg >= pacLen) key.x = (pacLen << 1) - 1 - alnRegVec(r)(i).rBeg   // forward position
-        if(alnRegVec(r)(i).rBeg >= pacLen) key.y = (alnRegVec(r)(i).score << 32) | (i << 2) | 2 | r
-        else key.y = (alnRegVec(r)(i).score << 32) | (i << 2) | 0 | r
+        if(alnRegVec(r)(i).rBeg >= pacLen) key.y = (alnRegVec(r)(i).score.toLong << 32) | (i << 2) | 2 | r
+        else key.y = (alnRegVec(r)(i).score.toLong << 32) | (i << 2) | 0 | r
+
+        //println("x: " + key.x + ", y: " + key.y)
 
         keyVec = keyVec :+ key
         i += 1
@@ -403,6 +446,7 @@ object MemSamPe {
                 k -= 1
               else {
                 var dist: Long = sortedKeyVec(i).x - sortedKeyVec(k).x
+                //println(k + ": " + dist)
                 if(dist > pes(dir).high) isBreak = true
                 else if(dist < pes(dir).low) k -= 1
                 else {
@@ -410,9 +454,15 @@ object MemSamPe {
                   var q: Int = ((sortedKeyVec(i).y >>> 32) + (sortedKeyVec(k).y >>> 32) + 0.721 * log(2.0 * erfc(abs(ns) * M_SQRT1_2)) * opt.a + 0.499).toInt
                   if(q < 0) q = 0
                   
+                  //var key: QuadLong = new QuadLong
                   var key: PairLong = new PairLong
                   key.y = k.toLong << 32 | i
-                  key.x = q.toLong << 32 | (hash64(key.y ^ id << 8) & 0xffffffff)
+                  key.x = q.toLong << 32 | ((hash64(key.y ^ id << 8) << 32) >>> 32) // modify from (hash64(key.y ^ id << 8) & 0xffffffff)
+                  //key.xMSB = key.x >>> 63
+                  //key.xRest = (key.x << 1) >>> 1
+                  //println("[" + sortedKeyVec(k).x + "," + sortedKeyVec(i).x + "]\t" + q + "\tdist=" + dist)
+                  //val tmp = (hash64(key.y ^ id << 8) << 32) >>> 32
+                  //println("[0] " + key.y + " " + key.x + " " + key.xMSB + " " + key.xRest + " " + tmp);
                   keyUVec = keyUVec :+ key
                   k -= 1
                 }
@@ -428,6 +478,8 @@ object MemSamPe {
       i += 1
     }
 
+    //println("keyU size: " + keyUVec.size)
+    //keyUVec.foreach(key => println(key.y + " " + key.x + " " + key.xMSB + " " + key.xRest))
     var ret = 0
     var sub = 0
     var numSub = 0
@@ -436,13 +488,17 @@ object MemSamPe {
       if(tmp < opt.oDel + opt.eDel) tmp = opt.oDel + opt.eDel
       if(tmp < opt.oIns + opt.eIns) tmp = opt.oIns + opt.eIns
       
+      //val sortedKeyUVec = keyUVec.sortBy(key => (key.xMSB, key.xRest, key.y))
       val sortedKeyUVec = keyUVec.sortBy(key => (key.x, key.y))
       var i = (sortedKeyUVec(sortedKeyUVec.size - 1).y >>> 32).toInt
       var k = (sortedKeyUVec(sortedKeyUVec.size - 1).y << 32 >>> 32).toInt
-      z((sortedKeyUVec(i).y & 1).toInt) = (sortedKeyUVec(i).y << 32 >>> 34).toInt
-      z((sortedKeyUVec(k).y & 1).toInt) = (sortedKeyUVec(k).y << 32 >>> 34).toInt
+      //println("i: " + i + ", k: " + k)
+      z((sortedKeyVec(i).y & 1).toInt) = (sortedKeyVec(i).y << 32 >>> 34).toInt
+      z((sortedKeyVec(k).y & 1).toInt) = (sortedKeyVec(k).y << 32 >>> 34).toInt
       ret = (sortedKeyUVec(sortedKeyUVec.size - 1).x >>> 32).toInt
       if(sortedKeyUVec.size > 1) sub = (sortedKeyUVec(sortedKeyUVec.size - 2).x >>> 32).toInt
+
+      //println("rest: " + (sortedKeyUVec(sortedKeyUVec.size - 1).xRest >>> 32) + " " + (sortedKeyUVec(sortedKeyUVec.size - 2).xRest >>> 32))
 
       i = sortedKeyUVec.size - 2
       while(i >= 0) {
@@ -456,6 +512,7 @@ object MemSamPe {
       numSub = 0
     }
 
+    //println(ret + " " + sub + " " + numSub + " " + z(0) + " " + z(1))
     (ret, sub, numSub, z)
   }
 
@@ -467,24 +524,42 @@ object MemSamPe {
     var numSub: Int = 0
     var extraFlag: Int = 1
     var seqsTrans: Array[Array[Byte]] = new Array[Array[Byte]](2)
+    var noPairingFlag: Boolean = false
+
+    // for testMemSamPe use
+    //seqsTrans(0) = seqs(0).seq.toCharArray.map(ele => (ele - 48).toByte)
+    //seqsTrans(1) = seqs(1).seq.toCharArray.map(ele => (ele - 48).toByte)
 
     seqsTrans(0) = seqs(0).seq.toCharArray.map(ele => locusEncode(ele))
     seqsTrans(1) = seqs(1).seq.toCharArray.map(ele => locusEncode(ele))
 
+    //print("seq0: ")
+    //seqsTrans(0).foreach(ele => print(ele))
+    //println
+    //print("seq1: ")
+    //seqsTrans(1).foreach(ele => print(ele))
+    //println
+
     if((opt.flag & MEM_F_NO_RESCUE) == 0) { // then perform SW for the best alignment
       var i = 0
       var alnRegTmpVec = new Array[Vector[MemAlnRegType]](2)
+      alnRegTmpVec(0) = scala.collection.immutable.Vector.empty
+      alnRegTmpVec(1) = scala.collection.immutable.Vector.empty
 
       while(i < 2) {
-        var j = 0
-        while(j < alnRegVec(i).size) {
-          if(alnRegVec(i)(j).score >= alnRegVec(i)(0).score - opt.penUnpaired)
-            alnRegTmpVec(i) = alnRegTmpVec(i) :+ alnRegVec(i)(j)
-          j += 1
+        if(alnRegVec(i) != null) {
+          var j = 0
+          while(j < alnRegVec(i).size) {
+            if(alnRegVec(i)(j).score >= alnRegVec(i)(0).score - opt.penUnpaired)
+              alnRegTmpVec(i) = alnRegTmpVec(i) :+ alnRegVec(i)(j)
+            j += 1
+          }
         }
 
         i += 1
       }
+
+      //println("Len: " + alnRegTmpVec(0).size + ", " + alnRegTmpVec(1).size)
 
       i = 0
       while(i < 2) {
@@ -492,9 +567,9 @@ object MemSamPe {
         while(j < alnRegTmpVec(i).size && j < opt.maxMatesw) {
           var iBar = 0
           if(i == 0) iBar = 1
-          val ret = memMateSw(opt, bns.l_pac, pac, pes, alnRegTmpVec(i)(j), seqs(iBar).seqLen, seqsTrans(iBar), alnRegVec(i)) 
+          val ret = memMateSw(opt, bns.l_pac, pac, pes, alnRegTmpVec(i)(j), seqs(iBar).seqLen, seqsTrans(iBar), alnRegVec(iBar)) 
           n += ret._1
-          alnRegVec(i) = ret._2
+          alnRegVec(iBar) = ret._2
           j += 1
         }
 
@@ -502,17 +577,25 @@ object MemSamPe {
       }  
     } 
     
-    memMarkPrimarySe(opt, alnRegVec(0), id<<1|0)
-    memMarkPrimarySe(opt, alnRegVec(1), id<<1|1)
+    alnRegVec(0) = memMarkPrimarySe(opt, alnRegVec(0), id<<1|0)
+    alnRegVec(1) = memMarkPrimarySe(opt, alnRegVec(1), id<<1|1)
 
-    if((opt.flag & MEM_F_NOPAIRING) <= 0) {
+    if((opt.flag & MEM_F_NOPAIRING) == 0) {
       // pairing single-end hits
-      if(alnRegVec(0).size > 0 && alnRegVec(1).size > 0) {
+      var a0Size = 0
+      var a1Size = 0
+      if(alnRegVec(0) != null) a0Size = alnRegVec(0).size
+      if(alnRegVec(1) != null) a1Size = alnRegVec(1).size
+      //println(a0Size + " " + a1Size)
+
+      if(alnRegVec(0) != null && alnRegVec(1) != null) {
         val retVal = memPair(opt, bns.l_pac, pac, pes, alnRegVec, id)
         val ret = retVal._1
         subo = retVal._2
         numSub = retVal._3
         z = retVal._4
+
+        //println(subo + " " + numSub + " " + ret + " " + z(0) + " " + z(1))
 
         if(ret > 0) {
           var scoreUn: Int = 0
@@ -525,19 +608,20 @@ object MemSamPe {
             var j = 1
             var isBreak = false
             while(j < alnRegVec(i).size && !isBreak) {
-              if(alnRegVec(i)(j).secondary < 0 && alnRegVec(i)(j).score > opt.T) {
+              if(alnRegVec(i)(j).secondary < 0 && alnRegVec(i)(j).score >= opt.T) 
                 isBreak = true
-                j -= 1
-              }
-              j += 1
+              else 
+                j += 1
             }
               
             if(j < alnRegVec(i).size) isMulti(i) = true
             else isMulti(i) = false
 
+            //println("j " + j + ", alnRegVec(i).size: " + alnRegVec(i).size)
             i += 1
           }
 
+          //println(isMulti(0) + " " + isMulti(1))
           if(!isMulti(0) && !isMulti(1)) {  
             // compute mapQ for the best SE hit
             scoreUn = alnRegVec(0)(0).score + alnRegVec(1)(0).score - opt.penUnpaired
@@ -553,6 +637,7 @@ object MemSamPe {
             // the following assumes no split hits
             if(ret > scoreUn) { // paired alignment is preferred
               var tmpRegs = new Array[MemAlnRegType](2)
+              //println(alnRegVec(0).size + " " + z(0) + " " + alnRegVec(1).size + " " + z(1))
               tmpRegs(0) = alnRegVec(0)(z(0))
               tmpRegs(1) = alnRegVec(1)(z(1))
 
@@ -614,58 +699,312 @@ object MemSamPe {
             seqs(1).sam = samStr1.str.dropRight(samStr1.size - samStr1.idx).mkString
 
             if(seqs(0).name != seqs(1).name) println("[Error] paired reads have different names: " + seqs(0).name + ", " + seqs(1).name)
-            n   // return value
+            
+            //println("[0] " + n)
           }
-          // else: goto no_pairing (TODO: in rare cases, the true hit may be long but with low score)
-
+          else // else: goto no_pairing (TODO: in rare cases, the true hit may be long but with low score)
+            noPairingFlag = true
         }
-      } 
-      // else: goto no_pairing 
+        else // else: goto no_pairing
+          noPairingFlag = true
+      }
+      else // else: goto no_pairing 
+        noPairingFlag = true 
     }
-    // else: goto no_pairing
+    else // else: goto no_pairing
+      noPairingFlag = true
 
-// no_pairing: start from here
-    var alnVec: Array[MemAlnType] = new Array[MemAlnType](2)
+    if(!noPairingFlag) n
+    else { // no_pairing: start from here
+      var alnVec: Array[MemAlnType] = new Array[MemAlnType](2)
 
+      var i = 0
+      while(i < 2) {
+        if(alnRegVec(i) != null && alnRegVec(i).size > 0 && alnRegVec(i)(0).score >= opt.T) alnVec(i) = memRegToAln(opt, bns, pac, seqs(i).seqLen, seqsTrans(i), alnRegVec(i)(0)) 
+        else alnVec(i) = memRegToAln(opt, bns, pac, seqs(i).seqLen, seqsTrans(i), null) 
+
+        i += 1
+      }
+
+      // if the top hits from the two ends constitute a proper pair, flag it.
+      if((opt.flag & MEM_F_NOPAIRING) == 0 && alnVec(0).rid == alnVec(1).rid && alnVec(0).rid >= 0) {
+        // Inline mem_infer_dir
+        var r1: Boolean = false
+        var r2: Boolean = false
+        if(alnRegVec(0)(0).rBeg >= bns.l_pac) r1 = true
+        if(alnRegVec(1)(0).rBeg >= bns.l_pac) r2 = true
+
+        var rBegLarger = alnRegVec(1)(0).rBeg
+        // rBegLarger is the coordinate of read 2 on the read 1 strand
+        if(r1 != r2) rBegLarger = (bns.l_pac << 1) - 1 - alnRegVec(1)(0).rBeg
+        var dist: Int = (alnRegVec(0)(0).rBeg - rBegLarger).toInt
+        if(rBegLarger > alnRegVec(0)(0).rBeg) dist = (rBegLarger - alnRegVec(0)(0).rBeg).toInt
+
+        var cond1 = 1
+        if(r1 == r2) cond1 = 0
+        var cond2 = 3
+        if(rBegLarger > alnRegVec(0)(0).rBeg) cond2 = 0
+
+        var d = cond1 ^ cond2
+     
+        if(pes(d).failed == 0 && dist >= pes(d).low && dist <= pes(d).high) extraFlag |= 2 
+      }
+
+      memRegToSAMSe(opt, bns, pac, seqs(0), alnRegVec(0), 0x41 | extraFlag, alnVec(1))
+      memRegToSAMSe(opt, bns, pac, seqs(1), alnRegVec(1), 0x81 | extraFlag, alnVec(0))
+
+      if(seqs(0).name != seqs(1).name) println("[Error] paired reads have different names: " + seqs(0).name + ", " + seqs(1).name)
+
+      //println("[1] " + n)
+      n   // return value
+    }
+
+  }
+
+
+  // test functions
+  def testMemMateSw(fileName: String, opt: MemOptType, pacLen: Long, pac: Array[Byte], pes: Array[MemPeStat]) {
+
+    val reader = new BufferedReader(new FileReader(fileName))
+    var line = reader.readLine
     var i = 0
-    while(i < 2) {
-      if(alnRegVec(i).size > 0 && alnRegVec(i)(0).score >= opt.T)
-        alnVec(i) = memRegToAln(opt, bns, pac, seqs(i).seqLen, seqsTrans(i), alnRegVec(i)(0))
-      else
-        alnVec(i) = memRegToAln(opt, bns, pac, seqs(i).seqLen, seqsTrans(i), null)
 
+    while(line != null) {
+      val lineFields = line.split(" ")
+      var reg = new MemAlnRegType
+      reg.rBeg = lineFields(0).toLong
+      reg.rEnd = lineFields(1).toLong
+      reg.qBeg = lineFields(2).toInt
+      reg.qEnd = lineFields(3).toInt
+      reg.score = lineFields(4).toInt
+      reg.trueScore = lineFields(5).toInt
+      reg.sub = lineFields(6).toInt
+      reg.csub = lineFields(7).toInt
+      reg.subNum = lineFields(8).toInt
+      reg.width = lineFields(9).toInt
+      reg.seedCov = lineFields(10).toInt
+      reg.secondary = lineFields(11).toInt
+      reg.hash = lineFields(12).toLong
+
+      line = reader.readLine
+      var seqLen = line.toInt
+      line = reader.readLine
+      val seq = line.toCharArray.map(ele => ((ele.toByte) - 48).toByte)
+      //seq.foreach(e => print(e))
+      //println
+      
+      line = reader.readLine
+      var vecSize = line.toInt
+      var regs: Array[MemAlnRegType] = new Array[MemAlnRegType](vecSize)
+      var j = 0
+      while(j < vecSize) {
+        line = reader.readLine
+        val lineFields_ = line.split(" ")
+        regs(j) = new MemAlnRegType
+        regs(j).rBeg = lineFields_(0).toLong
+        regs(j).rEnd = lineFields_(1).toLong
+        regs(j).qBeg = lineFields_(2).toInt
+        regs(j).qEnd = lineFields_(3).toInt
+        regs(j).score = lineFields_(4).toInt
+        regs(j).trueScore = lineFields_(5).toInt
+        regs(j).sub = lineFields_(6).toInt
+        regs(j).csub = lineFields_(7).toInt
+        regs(j).subNum = lineFields_(8).toInt
+        regs(j).width = lineFields_(9).toInt
+        regs(j).seedCov = lineFields_(10).toInt
+        regs(j).secondary = lineFields_(11).toInt
+        regs(j).hash = lineFields_(12).toLong
+        
+        j += 1
+      }
+
+      line = reader.readLine
+      // next input
+      line = reader.readLine
+
+      val ret = memMateSw(opt, pacLen, pac, pes, reg, seqLen, seq, regs)
+      println("ret: " + ret._1 + "; size: " + ret._2.size)
+
+      i += 1    
+    }
+  }
+
+  def testMemPair(fileName: String, opt: MemOptType, pacLen: Long, pac: Array[Byte], pes: Array[MemPeStat]) {
+
+    val reader = new BufferedReader(new FileReader(fileName))
+    var line = reader.readLine
+    var i = 0
+
+    while(line != null) {
+      var vecSize = line.toInt
+      var regs0: Array[MemAlnRegType] = new Array[MemAlnRegType](vecSize)
+      var j = 0
+      while(j < vecSize) {
+        line = reader.readLine
+        val lineFields_ = line.split(" ")
+        regs0(j) = new MemAlnRegType
+        regs0(j).rBeg = lineFields_(0).toLong
+        regs0(j).rEnd = lineFields_(1).toLong
+        regs0(j).qBeg = lineFields_(2).toInt
+        regs0(j).qEnd = lineFields_(3).toInt
+        regs0(j).score = lineFields_(4).toInt
+        regs0(j).trueScore = lineFields_(5).toInt
+        regs0(j).sub = lineFields_(6).toInt
+        regs0(j).csub = lineFields_(7).toInt
+        regs0(j).subNum = lineFields_(8).toInt
+        regs0(j).width = lineFields_(9).toInt
+        regs0(j).seedCov = lineFields_(10).toInt
+        regs0(j).secondary = lineFields_(11).toInt
+        //regs0(j).hash = 0
+        //regs0(j).hash = lineFields_(12).toLong
+        val bigInt = new BigInteger(lineFields_(12))
+        regs0(j).hash = bigInt.longValue
+        //println("BigInt: " + bigInt + ", Long: " + regs0(j).hash.toBinaryString)
+
+        j += 1
+      }
+
+      line = reader.readLine
+      vecSize = line.toInt
+      var regs1: Array[MemAlnRegType] = new Array[MemAlnRegType](vecSize)
+      j = 0
+      while(j < vecSize) {
+        line = reader.readLine
+        val lineFields_ = line.split(" ")
+        regs1(j) = new MemAlnRegType
+        regs1(j).rBeg = lineFields_(0).toLong
+        regs1(j).rEnd = lineFields_(1).toLong
+        regs1(j).qBeg = lineFields_(2).toInt
+        regs1(j).qEnd = lineFields_(3).toInt
+        regs1(j).score = lineFields_(4).toInt
+        regs1(j).trueScore = lineFields_(5).toInt
+        regs1(j).sub = lineFields_(6).toInt
+        regs1(j).csub = lineFields_(7).toInt
+        regs1(j).subNum = lineFields_(8).toInt
+        regs1(j).width = lineFields_(9).toInt
+        regs1(j).seedCov = lineFields_(10).toInt
+        regs1(j).secondary = lineFields_(11).toInt
+        //regs1(j).hash = lineFields_(12).toLong
+        //regs1(j).hash = 0 
+        val bigInt = new BigInteger(lineFields_(12))
+        regs1(j).hash = bigInt.longValue
+        //println("BigInt: " + bigInt + ", Long: " + regs1(j).hash.toBinaryString)
+
+        j += 1
+      }
+
+      line = reader.readLine
+      var id: Long = line.toLong     
+
+      var alnRegVec = new Array[Array[MemAlnRegType]](2)
+      alnRegVec(0) = regs0
+      alnRegVec(1) = regs1
+      if(regs0.size > 0 && regs1.size > 0) {
+        var ret = memPair(opt, pacLen, pac, pes, alnRegVec, id)
+        if(ret._1 > 0) {
+          val z = ret._4     
+          //println(ret._1 + " " + ret._2 + " " + ret._3 + " " + z(0) + " " + z(1))
+        }
+      }
+
+      line = reader.readLine
       i += 1
     }
+  }
 
-    // if the top hits from the two ends constitute a proper pair, flag it.
-    if((opt.flag & MEM_F_NOPAIRING) == 0 && alnVec(0).rid == alnVec(1).rid && alnVec(0).rid >= 0) {
-      // Inline mem_infer_dir
-      var r1: Boolean = false
-      var r2: Boolean = false
-      if(alnRegVec(0)(0).rBeg >= bns.l_pac) r1 = true
-      if(alnRegVec(1)(0).rBeg >= bns.l_pac) r2 = true
 
-      var rBegLarger = alnRegVec(1)(0).rBeg
-      // rBegLarger is the coordinate of read 2 on the read 1 strand
-      if(r1 != r2) rBegLarger = (bns.l_pac << 1) - 1 - alnRegVec(1)(0).rBeg
-      var dist: Int = (alnRegVec(0)(0).rBeg - rBegLarger).toInt
-      if(rBegLarger > alnRegVec(0)(0).rBeg) dist = (rBegLarger - alnRegVec(0)(0).rBeg).toInt
+  def testMemSamPe(fileName: String, opt: MemOptType, bns: BNTSeqType, pac: Array[Byte], pes: Array[MemPeStat]) {
 
-      var cond1 = 1
-      if(r1 == r2) cond1 = 0
-      var cond2 = 3
-      if(rBegLarger > alnRegVec(0)(0).rBeg) cond2 = 0
+    val reader = new BufferedReader(new FileReader(fileName))
+    var line = reader.readLine
+    var i = 0
 
-      var d = cond1 ^ cond2
-     
-      if(pes(d).failed == 0 && dist >= pes(d).low && dist <= pes(d).high) extraFlag |= 2 
+    while(line != null) {
+      var id = line.toInt
+      
+      line = reader.readLine
+      val seqLen0 = line.toInt
+      line = reader.readLine
+      val seq0 = line
+
+      line = reader.readLine
+      val seqLen1 = line.toInt
+      line = reader.readLine
+      val seq1 = line
+
+      line = reader.readLine
+      var vecSize = line.toInt
+      var regs0: Array[MemAlnRegType] = new Array[MemAlnRegType](vecSize)
+      var j = 0
+      while(j < vecSize) {
+        line = reader.readLine
+        val lineFields_ = line.split(" ")
+        regs0(j) = new MemAlnRegType
+        regs0(j).rBeg = lineFields_(0).toLong
+        regs0(j).rEnd = lineFields_(1).toLong
+        regs0(j).qBeg = lineFields_(2).toInt
+        regs0(j).qEnd = lineFields_(3).toInt
+        regs0(j).score = lineFields_(4).toInt
+        regs0(j).trueScore = lineFields_(5).toInt
+        regs0(j).sub = lineFields_(6).toInt
+        regs0(j).csub = lineFields_(7).toInt
+        regs0(j).subNum = lineFields_(8).toInt
+        regs0(j).width = lineFields_(9).toInt
+        regs0(j).seedCov = lineFields_(10).toInt
+        regs0(j).secondary = lineFields_(11).toInt
+        //regs0(j).hash = 0
+        //regs0(j).hash = lineFields_(12).toLong
+        val bigInt = new BigInteger(lineFields_(12))
+        regs0(j).hash = bigInt.longValue
+        //println("BigInt: " + bigInt + ", Long: " + regs0(j).hash.toBinaryString)
+
+        j += 1
+      }
+
+      line = reader.readLine
+      vecSize = line.toInt
+      var regs1: Array[MemAlnRegType] = new Array[MemAlnRegType](vecSize)
+      j = 0
+      while(j < vecSize) {
+        line = reader.readLine
+        val lineFields_ = line.split(" ")
+        regs1(j) = new MemAlnRegType
+        regs1(j).rBeg = lineFields_(0).toLong
+        regs1(j).rEnd = lineFields_(1).toLong
+        regs1(j).qBeg = lineFields_(2).toInt
+        regs1(j).qEnd = lineFields_(3).toInt
+        regs1(j).score = lineFields_(4).toInt
+        regs1(j).trueScore = lineFields_(5).toInt
+        regs1(j).sub = lineFields_(6).toInt
+        regs1(j).csub = lineFields_(7).toInt
+        regs1(j).subNum = lineFields_(8).toInt
+        regs1(j).width = lineFields_(9).toInt
+        regs1(j).seedCov = lineFields_(10).toInt
+        regs1(j).secondary = lineFields_(11).toInt
+        //regs1(j).hash = lineFields_(12).toLong
+        //regs1(j).hash = 0 
+        val bigInt = new BigInteger(lineFields_(12))
+        regs1(j).hash = bigInt.longValue
+        //println("BigInt: " + bigInt + ", Long: " + regs1(j).hash.toBinaryString)
+
+        j += 1
+      }
+
+      var seqs = new Array[FASTQSingleNode](2)
+      seqs(0) = new FASTQSingleNode
+      seqs(0).seq = seq0
+      seqs(0).seqLen = seqLen0
+      seqs(1) = new FASTQSingleNode
+      seqs(1).seq = seq1
+      seqs(1).seqLen = seqLen1
+      var alnRegVec = new Array[Array[MemAlnRegType]](2)
+      alnRegVec(0) = regs0
+      alnRegVec(1) = regs1
+      memSamPe(opt, bns, pac, pes, id, seqs, alnRegVec)
+
+      line = reader.readLine
+      i += 1
     }
-
-    memRegToSAMSe(opt, bns, pac, seqs(0), alnRegVec(0), 0x41 | extraFlag, alnVec(1))
-    memRegToSAMSe(opt, bns, pac, seqs(1), alnRegVec(1), 0x81 | extraFlag, alnVec(0))
-
-    if(seqs(0).name != seqs(1).name) println("[Error] paired reads have different names: " + seqs(0).name + ", " + seqs(1).name)
-    n   // return value
   }
 }
 

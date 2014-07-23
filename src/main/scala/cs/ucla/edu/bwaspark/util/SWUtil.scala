@@ -563,7 +563,7 @@ object SWUtil {
 
   def SWAlign2(qLen: Int, query: Array[Byte], tLen: Int, target: Array[Byte], m: Int, opt: MemOptType, xtra: Int): SWAlnType = {
     var aln = SWAlign(qLen, query, tLen, target, m, opt, xtra)
-    
+   
     if((xtra&KSW_XSTART) == 0 || ((xtra&KSW_XSUBO) > 0 && aln.score < (xtra&0xffff))) aln
     else {   
       revSeq(aln.qEnd + 1, query)

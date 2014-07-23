@@ -18,7 +18,8 @@ object MemMarkPrimarySe {
    */
   //??opt a list or a object??
   def memMarkPrimarySe(opt: MemOptType, a: Array[MemAlnRegType], id: Long) : Array[MemAlnRegType] = {
-    val n: Int = a.length
+    var n: Int = 0
+    if(a != null) n = a.length
     var i: Int = 0
     var j: Int = 0
     var tmp: Int = 0

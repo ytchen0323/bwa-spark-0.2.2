@@ -14,63 +14,54 @@ import cs.ucla.edu.bwaspark.worker1.MemSortAndDedup._
 //2)using SW algorithm to extend each chain to all possible aligns
 object BWAMemWorker1 {
   
+  //pre-process: transform A/C/G/T to 0,1,2,3
+  private def locusEncode(locus: Char): Byte = {
+    //transforming from A/C/G/T to 0,1,2,3
+    locus match {
+      case 'A' => 0
+      case 'a' => 0
+      case 'C' => 1
+      case 'c' => 1
+      case 'G' => 2
+      case 'g' => 2
+      case 'T' => 3
+      case 't' => 3
+      case '-' => 5
+      case _ => 4
+    }
+  }
+
   //the function which do the main task
   def bwaMemWorker1(opt: MemOptType, //BWA MEM options
                     bwt: BWTType, //BWT and Suffix Array
                     bns: BNTSeqType, //.ann, .amb files
                     pac: Array[Byte], //.pac file uint8_t
-                    pes: Array[MemPeStat], //pes array
                     len: Int, //the length of the read
                     seq: String //a read
-                    ): Array[MemAlnRegType] = { //all possible alignment  
+                    ): MemAlnRegArrayType = { //all possible alignment  
 
-    //for paired alignment, to add
-    //!!!to add!!!
-    //for now, we only focus on single sequence alignment
-    //if (!(opt.flag & MEM_F_PE)) {
-    if (true) {
+    //println(seq)
+    val read: Array[Byte] = seq.toCharArray.map(ele => locusEncode(ele))
 
-      //pre-process: transform A/C/G/T to 0,1,2,3
+    //first step: generate all possible MEM chains for this read
+    val chains = generateChains(opt, bwt, bns.l_pac, len, read) 
 
-      def locusEncode(locus: Char): Byte = {
-        //transforming from A/C/G/T to 0,1,2,3
-        locus match {
-          case 'A' => 0
-          case 'a' => 0
-          case 'C' => 1
-          case 'c' => 1
-          case 'G' => 2
-          case 'g' => 2
-          case 'T' => 3
-          case 't' => 3
-          case '-' => 5
-          case _ => 4
-        }
-      }
+    //second step: filter chains
+    val chainsFiltered = memChainFilter(opt, chains)
 
-      //println(seq)
-      val read: Array[Byte] = seq.toCharArray.map(ele => locusEncode(ele))
+    if (chainsFiltered == null) 
+      null
+    else {
+      // build the references of the seeds in each chain
+      var totalSeedNum = 0
+      chainsFiltered.foreach(chain => {
+        totalSeedNum += chain.seeds.length
+        } )
 
-      //first step: generate all possible MEM chains for this read
-      val chains = generateChains(opt, bwt, bns.l_pac, len, read) 
-
-      //second step: filter chains
-      val chainsFiltered = memChainFilter(opt, chains)
-
-      if (chainsFiltered == null) 
-        null
-      else {
-
-        // build the references of the seeds in each chain
-        var totalSeedNum = 0
-        chainsFiltered.foreach(chain => {
-          totalSeedNum += chain.seeds.length
-          } )
-
-        //third step: for each chain, from chain to aligns
-        var regArray = new MemAlnRegArrayType
-        regArray.maxLength = totalSeedNum
-        regArray.regs = new Array[MemAlnRegType](totalSeedNum)
+      //third step: for each chain, from chain to aligns
+      var regArray = new MemAlnRegArrayType
+      regArray.maxLength = totalSeedNum
+      regArray.regs = new Array[MemAlnRegType](totalSeedNum)
 
         // test
 /*
@@ -79,15 +70,13 @@ object BWAMemWorker1 {
         chainsFiltered(1) = tmp
 */
 
-        for (i <- 0 until chainsFiltered.length) {
-          //alignRegArray = memChainToAln(opt, bns.l_pac, pac, len, read, chainsFiltered(i), regs)
-          //regArray = memChainToAln(opt, bns.l_pac, pac, len, read, chainsFiltered(i), regArray)
-          memChainToAln(opt, bns.l_pac, pac, len, read, chainsFiltered(i), regArray)
-        }
+      for (i <- 0 until chainsFiltered.length) {
+        memChainToAln(opt, bns.l_pac, pac, len, read, chainsFiltered(i), regArray)
+      }
 
-        regArray.regs = regArray.regs.filter(r => (r != null))
-        regArray.maxLength = regArray.regs.length
-        assert(regArray.curLength == regArray.maxLength, "[Error] After filtering array elements")
+      regArray.regs = regArray.regs.filter(r => (r != null))
+      regArray.maxLength = regArray.regs.length
+      assert(regArray.curLength == regArray.maxLength, "[Error] After filtering array elements")
 
 /*
     println("#####")
@@ -99,15 +88,11 @@ object BWAMemWorker1 {
         i += 1
     } )
 */
-        //last step: sorting and deduplication
-        val pureRegArray = memSortAndDedup(regArray, opt.maskLevelRedun)
+      //last step: sorting and deduplication
+      val pureRegArray = memSortAndDedup(regArray, opt.maskLevelRedun)
 
-        pureRegArray.regs
-      }
-    }
-    else {
-      assert (false)
-      null
+      pureRegArray
     }
   }
+
 }
